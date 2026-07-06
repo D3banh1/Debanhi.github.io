@@ -7,4 +7,4 @@ title: CV
 
 You can download my CV below.
 
-[Download my CV](Debanhi Rojas_CV (1))
+[Download my CV](assets/CV.pdf)
