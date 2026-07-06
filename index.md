@@ -7,6 +7,8 @@ title: Home
 
 ### Ph.D. Student
 
+<img src="assets/images/headshot.jpeg" width="250">
+
 University of California, Santa Barbara
 
 Welcome to my academic website.
