@@ -3,4 +3,4 @@
 This repository contains the source code for my academic website.
 
 Visit my website:
-https://debanhi.github.io
+https://Debanhi.github.io
