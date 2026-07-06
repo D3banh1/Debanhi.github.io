@@ -13,4 +13,4 @@ Debanhi@ucsb.edu
 
 ## LinkedIn
 
-www.linkedin.com/in/debanhi-rojas-figueroa-25159b2a7
+[LinkedIn](https://www.linkedin.com/in/debanhi-rojas-figueroa-25159b2a7)
