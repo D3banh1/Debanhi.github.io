@@ -26,10 +26,3 @@ I study how gender exclusion within Indigenous governance shapes women's securit
 
 ---
 
-## Contact
-
-Email:
-Debanhi@ucsb.edu
-
-LinkedIn:
-www.linkedin.com/in/debanhi-rojas-figueroa-25159b2a7
