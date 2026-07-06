@@ -9,7 +9,7 @@ I would be happy to connect. Please feel free to reach out through email or Link
 
 ## Email
 
-Debanhi@ucsb.edu
+[Debanhi@ucsb.edu](mailto:Debanhi@ucsb.edu)
 
 ## LinkedIn
 
