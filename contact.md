@@ -3,8 +3,6 @@ layout: page
 title: Contact
 ---
 
-# Contact
-
 I am always happy to connect. Please feel free to reach out with questions about my research, potential collaborations, or inquiries from prospective graduate students.
 
 ## Email
