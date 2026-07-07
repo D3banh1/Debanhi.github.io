@@ -18,10 +18,11 @@ How can gender participation in security and governance reduce gender insecurity
 
 ### The Impact of Gender Empowerment on Gender Violence 
 
-Debanhi Rojas and Alison Brysk (2026)
+Rojas, Debanhi and Brysk, Alison (2026)
 
 ### Can Indigenous Political Autonomy Impact Gender-Based Violence? Evidence from Mexico
 
+Rojas, Debanhi
 <details>
 <summary><strong>Abstract</strong></summary>
 
