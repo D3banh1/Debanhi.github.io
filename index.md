@@ -14,7 +14,9 @@ title: About Me
 <h1>Hello!</h1>
 
 <p>
-Welcome to my website. I am a Ph.D. student in Political Science at the University of California, Santa Barbara. I study violence against women, focusing on how alternative forms of governance, women's inclusion in politics, and security institutions' response to feminist movements shape this violence. My research draws on semi-structured interviews, geographic regression discontinuity designs (GRDDs), and process tracing.
+Welcome to my website. I am a Ph.D. student in Political Science at the University of California, Santa Barbara. I study violence against women, focusing on how alternative forms of governance, women's inclusion in politics, and security institutions' shape this violence. My research draws on semi-structured interviews, geographic regression discontinuity designs (GRDDs), and process tracing.
+
+At UC Santa Barbara, I am a graduate student researcher in Global Studies and serve as a teaching assistant in the Political Science department.
 
 Before beginning my Ph.D., I earned my B.A. in Political Science–International Affairs with a minor in Spanish from the University of California, Riverside. In the summer of 2024, I was a fellow in the National Science Foundation (NSF)-funded Mobilization and Political Economy (MPE) Research Program at the University of Pittsburgh, where I developed my interest in studying women's political participation and representation.
 
