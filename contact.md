@@ -5,7 +5,7 @@ title: Contact
 
 # Contact
 
-I would be happy to connect. Please feel free to reach out through email or LinkedIn.
+I am always happy to connect. Please feel free to reach out with questions about my research, potential collaborations, or inquiries from prospective graduate students.
 
 ## Email
 
