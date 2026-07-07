@@ -13,4 +13,4 @@ sass:
   style: compressed
 
 minima:
-  custom_head: true
+  custom_head: head-custom.html
