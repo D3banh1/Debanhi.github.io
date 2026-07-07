@@ -1,1 +1,27 @@
+<!doctype html>
+<html lang="{{ site.lang | default: "en-US" }}">
 
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>{{ site.title }}</title>
+
+  <link rel="stylesheet" href="{{ '/assets/main.css' | relative_url }}">
+
+  <meta name="google-site-verification" content="a_4ZMhmIrF86GiYQWBm9hJAunJnd9g5LmP-a18iRfEc" />
+
+  {% seo %}
+</head>
+
+<body>
+
+  <main class="page-content">
+    <div class="wrapper">
+      {{ content }}
+    </div>
+  </main>
+
+</body>
+
+</html>
