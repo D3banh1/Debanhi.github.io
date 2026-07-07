@@ -3,37 +3,19 @@
 
 @import "minima";
 
-/* Keep white background */
 body {
   background-color: white;
   color: #003B5C;
 }
 
-/* Headers */
 h1, h2, h3, h4, h5, h6 {
   color: #003B5C;
 }
 
-/* Paragraph text */
 p {
   color: #003B5C;
 }
 
-/* Links */
 a {
   color: #005B96;
-}
-
-a:hover {
-  color: #0077B6;
-}
-
-/* Navigation menu */
-.site-nav .page-link {
-  color: #003B5C;
-}
-
-/* Website title */
-.site-title {
-  color: #003B5C !important;
 }
