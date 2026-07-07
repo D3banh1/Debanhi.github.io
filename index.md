@@ -3,14 +3,13 @@ layout: page
 title: Home
 ---
 
-<div style="display: flex; align-items: center; gap: 40px;">
-<div>
+<div style="display: flex; flex-direction: row; align-items: flex-start; gap: 50px;">
 
+<div style="flex: 1;">
 <img src="assets/images/headshot.jpeg" width="250">
-
 </div>
 
-<div>
+<div style="flex: 2;">
 
 <h1>Debanhi Rojas</h1>
 
@@ -22,8 +21,10 @@ Welcome to my academic website. I am a Ph.D. student in Political Science at the
 </p>
 
 </div>
+
 </div>
 
+---
 
 ## Research Interests
 
@@ -32,10 +33,3 @@ Welcome to my academic website. I am a Ph.D. student in Political Science at the
 - Political Violence
 - Comparative Politics
 - Latin American Politics
-
-
-## Current Projects
-
-**Governance Without Women: How Gender Exclusion Shapes Security in Mexico's Indigenous Communities**
-
-This project examines how women's exclusion from Indigenous governance institutions shapes security outcomes and political participation in Mexico.
