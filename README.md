@@ -1,4 +1,4 @@
-# Debanhi Rojas Academic Website
+# Debanhi Rojas Grad student Website
 
 This repository contains the source code for my academic website.
 
