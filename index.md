@@ -1,6 +1,6 @@
 ---
 layout: page
-title: Home
+title: About Me
 ---
 
 <div style="display: flex; flex-direction: row; align-items: flex-start; gap: 50px;">
