@@ -2,7 +2,7 @@
 layout: page
 title: About
 ---
-
+<meta name="google-site-verification" content="a_4ZMhmIrF86GiYQWBm9hJAunJnd9g5LmP-a18iRfEc" />
 <div style="display: flex; flex-direction: row; align-items: flex-start; gap: 50px;">
 
 <div style="flex: 1;">
