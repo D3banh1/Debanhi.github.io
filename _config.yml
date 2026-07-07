@@ -9,5 +9,5 @@ header_pages:
   - gallery.md
   - contact.md
 
-  sass:
+sass:
   style: compressed
