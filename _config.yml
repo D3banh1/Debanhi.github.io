@@ -12,5 +12,5 @@ header_pages:
 sass:
   style: compressed
 
-  minima:
+minima:
   custom_head: true
