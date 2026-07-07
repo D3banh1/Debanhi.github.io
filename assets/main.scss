@@ -5,17 +5,21 @@
 
 body {
   background-color: white;
-  color: #003B5C;
+  color: #1B4332;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  color: #003B5C;
+  color: #1B4332;
 }
 
 p {
-  color: #003B5C;
+  color: #1B4332;
 }
 
 a {
-  color: #005B96;
+  color: #2D6A4F;
+}
+
+a:hover {
+  color: #40916C;
 }
