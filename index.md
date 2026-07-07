@@ -1,6 +1,6 @@
 ---
 layout: page
-title: About Me
+title: About
 ---
 
 <div style="display: flex; flex-direction: row; align-items: flex-start; gap: 50px;">
@@ -24,17 +24,3 @@ Before beginning my Ph.D., I earned my B.A. in Political Science–International
  <p> 
 During the school year, when I am not in Ellison Hall, I am most likely running along Butterfly Beach or exploring a new coffee shop in downtown Santa Barbara! However, during the summer, I spend time in Oaxaca, Mexico, where both of my parents are from.
 </p>
-
-</div>
-
-</div>
-
----
-
-## Research Interests
-
-- Gender Politics
-- Organized Crime
--  Indigenous Governance
-- Comparative Politics
-- Latin American Politics
