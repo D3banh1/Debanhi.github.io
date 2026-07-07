@@ -8,3 +8,6 @@ header_pages:
   - cv.md
   - gallery.md
   - contact.md
+
+sass:
+  style: compressed
