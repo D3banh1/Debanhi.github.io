@@ -3,6 +3,6 @@ layout: page
 title: CV
 ---
 
-You can download my CV below.
+You can view my CV below.
 
-[Download my CV](assets/cv.pdf)
+[View my CV](assets/cv.pdf)
