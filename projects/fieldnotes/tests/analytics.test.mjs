@@ -17,7 +17,7 @@ test('activation and retention exclude immature users and preserve non-activated
  add('recent','workspace_opened','-1 day');
  add('recent','project_created','-1 day');
  add('recent','source_created','-1 day');
- const sql=readFileSync(new URL('../analytics/queries.sql',import.meta.url),'utf8').replace(/^--.*$/gm,'').split(';').map(x=>x.trim()).filter(Boolean);
+ const sql=readFileSync(new URL('../analytics/study_design.sql',import.meta.url),'utf8').replace(/^--.*$/gm,'').split(';').map(x=>x.trim()).filter(Boolean);
  const activation=db.prepare(sql[1]).get();
  assert.equal(activation.eligible_users,2);assert.equal(activation.activated_users,1);assert.equal(activation.activation_pct,50);
  const retention=db.prepare(sql[2]).get();

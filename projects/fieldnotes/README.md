@@ -1,70 +1,84 @@
 # Fieldnotes
 
-A research workspace for graduate students to organize literature, connect sources to projects, write research notes, and track milestones. Built as a first product analytics portfolio project for Debanhi Rojas Figueroa, with AI-assisted scaffolding.
+A no-account research workspace for graduate students: literature, project questions, notes, milestones, and personal activity analytics. Initial scaffolding was built with AI assistance for Debanhi Rojas Figueroa’s product analytics learning project.
 
-## Working features
+## Use the app
 
-- Create, edit, and delete projects, literature sources, and milestones.
-- Save authors, year, source type, PDF or source URL, topics, planned use, reading status, research notes, and notes completion.
-- Filter literature by project or reading status and search titles, authors, and topics.
-- View project milestone progress and mark milestones complete or reopen them.
-- Authenticated per-user cloud persistence, optimistic concurrency checks, and input validation.
-- Record feature actions; explore daily activity and descriptive workspace metrics.
-- Export literature and activity CSVs, plus a full workspace JSON backup.
+Open the published app and start working. No ChatGPT account, email address, or login is required. Each browser keeps its own workspace using localStorage. Projects, notes, and recorded actions are not sent to an application database or third-party analytics service. The hosting provider still handles ordinary website requests.
 
-Initial projects, source statuses, example notes, and milestone states are sample content. Book titles are bibliographic examples. No confidential research data is embedded. Anonymous previews are session-only and reset on reload; authenticated hosted workspaces use the database. JSON export is a backup only; import and file uploads are not implemented.
+Work does not automatically sync between browsers or devices. Clearing browser data removes saved work; private browsing may discard it when the window closes. Use **Build journal → Export full backup** regularly. **Import backup** lets you review and replace the current workspace with a JSON backup, including notes and event history. CSV exports are available for literature and activity analysis.
 
-## Stack and boundaries
+The initial projects, statuses, notes, and milestones are clearly labeled sample content. Replace them with your own work. A new browser starts with a separate sample workspace, not another visitor’s records.
 
-React, TypeScript, Vinext (Vite-based), Cloudflare Workers, Drizzle ORM, and Cloudflare D1 (SQLite). The hosted version uses platform-managed ChatGPT authentication. It does not use Express, PostgreSQL, or Google SSO. GitHub Pages serves the existing personal website; it cannot run this backend. Deploy this application separately.
+## Features
 
-Workspaces are stored as validated JSON snapshots with a version number. Events are separate relational records indexed by user and time. This keeps the first iteration manageable; normalizing projects, sources, and milestones into their own tables is a future engineering exercise. Saves succeed independently of optional activity logging, so analytics can undercount when logging fails. The dashboard loads the most recent 10,000 events per user.
+- Add, edit, and delete projects, literature sources, and milestones.
+- Save authors, year, source type, source/PDF links, topics, planned use, notes, reading status, and notes completion.
+- Search literature and filter by project or reading status.
+- Track milestone completion and project progress.
+- Persist browser data with validation and stale-tab checks.
+- Export full JSON backups and restore them after review.
+- Export literature and local event CSVs; examine descriptive usage patterns.
+- Recover a raw backup if stored data cannot be parsed, rather than silently overwriting it.
+
+The activity log retains at most 5,000 events. It describes this browser’s usage, not unique people, population retention, or a randomized experiment. No measured business impact is claimed.
+
+## Stack
+
+React, TypeScript, Vinext/Vite, and Zod validation, hosted on Cloudflare Workers through Sites. This version uses browser persistence and has no application API routes or authentication dependency. Historical database schema/migrations from the first private prototype are retained unchanged for deployment history; the current UI does not use them.
+
+The app lives in `projects/fieldnotes` in the GitHub portfolio repository. Existing personal website pages are unchanged. The live app is deployed separately from the Jekyll website. Express, PostgreSQL, Google SSO, collaboration, automatic cloud synchronization, and file uploads are not implemented.
 
 ## Run locally
 
-Requires Node.js 22.13 or newer. Run commands from this project folder.
+Requires Node.js 22.13 or newer. Run commands from the project folder:
 
 ```sh
 npm ci
-npm run build
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_young_odin.sql
 npm run dev
 ```
 
-Run `npm run db:generate` only after changing `db/schema.ts`; initial migrations already exist. Local and hosted databases are separate. Do not reapply migrations to a database that already has them. Set the portable execution profile on your computer with `node scripts/configure-execution-profile.mjs`. In portable loopback development, `/signin-with-chatgpt?return_to=/` uses the starter’s mock identity, which is excluded from production. Managed preview without identity shows the session-only demo.
-
-For hosted publishing, use the Sites workflow. The hosting manifest identifies the existing private deployment; preserve that ID. No secrets belong in the repository.
-
-## Checks
+For a production build and automated checks:
 
 ```sh
-npx tsc --noEmit
+npm run typecheck
+npm test
 npm run build
-node --experimental-strip-types --test tests/model.test.mjs
 ```
 
-Optional integration check: `node tests/api-smoke.mjs http://127.0.0.1:4173`. It accepts only loopback URLs, sends synthetic local identities, and verifies persistence, conflict handling, validation, and user separation. It writes disposable QA records to your local database. Never run it against production.
+Deployment uses the Sites workflow and the existing `.openai/hosting.json` identity. Do not publish credentials or replace the project ID with a guessed value. No additional service accounts or API keys are required to use the app.
 
-## Learn product analytics
+## Your first analytics exercise
 
-Use `analytics/queries.sql` for SQL examples and metric definitions. `analytics/analyze_events.R` creates a chart from an activity CSV using base R. Exports omit user identifiers because the current interface analyzes only the current user’s workspace.
+1. Create one research project and add five sources.
+2. Write notes for two sources and finish one milestone.
+3. Export event and literature CSVs.
+4. Use `analytics/queries.sql` to count actions by day and feature.
+5. Run `Rscript analytics/analyze_events.R /path/to/fieldnotes-events.csv`.
+6. Write a one-page memo: question, metric, result, limitation, next decision.
 
-Your first exercise:
+The R script uses base R and creates a feature-usage chart beside the CSV. The dashboard uses local dates; the SQL and R examples use UTC. Importing someone else’s backup or sharing a browser mixes usage histories, so document your data source.
 
-1. Create a real project and add five sources.
-2. Add notes to two sources and complete a milestone.
-3. Export events from Analytics.
-4. Run the R script and explain which features you used most.
-5. Write a one-page memo: question, metric, result, limitation, next decision.
+### Use SQL on the exports
 
-Activation and retention SQL examples require mature observations and an appropriate user sample. This initial private app cannot estimate population adoption, causal product effects, or an A/B test result. No measured impact is claimed. A later study needs consent, instrumented errors, entry-point events, and an experiment design before recruiting participants.
+With the SQLite CLI, import CSV headers as column names into a new scratch database:
 
-## Development roadmap
+```text
+sqlite3 fieldnotes-analysis.db
+.mode csv
+.import /path/to/fieldnotes-events.csv events
+.import /path/to/fieldnotes-sources.csv sources
+.read analytics/queries.sql
+```
 
-- Improve the source form based on your own usage.
-- Normalize the database and add workspace backup import.
-- Track form starts and validation errors without recording note text.
-- Add source sorting and additional automated workflow tests.
-- Design an experiment; simulate data separately and label it simulated.
+`analytics/study_design.sql` is a separately labeled future multiuser study example. It assumes a consented dataset with user IDs; the current no-account app does not collect or provide those IDs. Its automated test demonstrates complete observation windows and correct cohort denominators, not actual retention results.
 
-Describe your actual contributions when presenting this project. This initial scaffold was built with AI assistance; the analysis, decisions, validation, and later improvements you personally make are the work to explain in interviews.
+## Next improvements to build yourself
+
+- Improve one source-form interaction based on your experience.
+- Add sorting and test the empty-state behavior.
+- Distinguish form starts, abandonments, and successful submissions without storing sensitive note text in event logs.
+- Design an experiment, then analyze separately labeled simulated data.
+- Consider optional independent authentication and cloud sync only if users need them.
+
+Explain your own contributions in interviews. The initial scaffold is AI-assisted; your subsequent analysis, product decisions, testing, and improvements are the work to demonstrate.

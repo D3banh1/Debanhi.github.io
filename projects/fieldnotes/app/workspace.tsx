@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { BookOpen, LayoutDashboard, Layers, CheckSquare, BarChart3, Plus, ArrowUpRight, ArrowRight, Search, ChevronDown, ChevronRight, X, Check, MoreHorizontal, Download, Leaf, CalendarDays, FileText, ExternalLink, ArrowLeft, CheckCircle2, Clock3, BookMarked, Compass, Menu, Trash2, RefreshCw, FolderOpen, Code2 } from 'lucide-react';
-import { starterData, type Data, type Source, type Project, type Task, type Activity } from './model';
+import { STORAGE_KEY, freshSnapshot, readSnapshot, saveSnapshot, parseBackup, type WorkspaceSnapshot } from './persistence';
+import { sourceEvent, milestoneEvent, starterData, type Data, type Source, type Project, type Task, type Activity } from './model';
 type View = 'Overview' | 'Projects' | 'Literature' | 'Milestones' | 'Analytics' | 'Build journal';
 type Modal = {
     kind: 'source';
@@ -20,103 +21,98 @@ function download(name: string, text: string, mime = 'text/plain') { const link 
 const csv = (rows: unknown[][]) => rows.map(row => row.map(v => { let s = String(v ?? ''); if (/^[=+@\-\t\r]/.test(s))
     s = "'" + s; return '"' + s.replaceAll('"', '""') + '"'; }).join(',')).join('\r\n');
 export default function Workspace() {
-    const [data, setData] = useState<Data | null>(null), [mode, setMode] = useState<'loading' | 'demo' | 'saved' | 'error'>('loading'), [events, setEvents] = useState<Activity[]>([]), [version, setVersion] = useState(0);
+    const [data, setData] = useState<Data | null>(null);
+    const [mode, setMode] = useState<'loading' | 'local' | 'error'>('loading');
+    const [events, setEvents] = useState<Activity[]>([]);
     const [view, setView] = useState<View>('Overview'), [query, setQuery] = useState(''), [filter, setFilter] = useState('All sources'), [projectFilter, setProjectFilter] = useState('all'), [modal, setModal] = useState<Modal | null>(null), [toast, setToast] = useState(''), [error, setError] = useState(''), [saving, setSaving] = useState(false), [mobile, setMobile] = useState(false);
+    const [pendingImport, setPendingImport] = useState<{data: Data; events: Activity[]} | null>(null);
+    const [resetConfirm, setResetConfirm] = useState(false);
+    const snapshotRef = useRef<WorkspaceSnapshot | null>(null);
     const started = useRef(false);
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lock = useRef(false);
-    function tell(message: string) { setToast(message); if (timer.current)
-        clearTimeout(timer.current); timer.current = setTimeout(() => setToast(''), 3500); }
-    async function load() { setMode('loading'); setError(''); try {
-        const res = await fetch('/api/workspace');
-        const body = await res.json() as {
-            error?: string;
-            data: Data;
-            mode: 'demo' | 'saved';
-            events: Activity[];
-            version: number;
-            activity: Activity | null;
-        };
-        if (!res.ok)
-            throw Error(body.error);
-        setData(body.data);
-        setMode(body.mode);
-        setEvents(body.events);
-        setVersion(body.version);
-        if (body.mode === 'saved' && !started.current) {
-            started.current = true;
-            const er = await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'workspace_opened' }) });
-            if (er.ok) {
-                const e = await er.json() as {
-                    activity: Activity;
-                };
-                setEvents(prev => [e.activity, ...prev]);
-            }
+    function tell(message: string) {
+        setToast(message);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setToast(''), 3500);
+    }
+    function apply(snapshot: WorkspaceSnapshot) {
+        snapshotRef.current = snapshot;
+        setData(snapshot.data);
+        setEvents(snapshot.events);
+        setMode('local');
+    }
+    function persist(next: Data, activity: Activity, history?: Activity[]) {
+        if (!snapshotRef.current) throw Error('Your workspace is not ready.');
+        const previous = snapshotRef.current;
+        apply(saveSnapshot(localStorage, previous, next, [activity, ...(history ?? previous.events)]));
+    }
+    function load() {
+        setMode('loading'); setError('');
+        try {
+            const previous = readSnapshot(localStorage) ?? freshSnapshot();
+            const opened: Activity = {id: uid(), name: 'workspace_opened', entityId: null, createdAt: new Date().toISOString()};
+            apply(saveSnapshot(localStorage, previous, previous.data, [opened, ...previous.events]));
+        } catch (e) {
+            setMode('error');
+            setError(e instanceof Error ? e.message : 'Your browser could not open local storage.');
         }
     }
-    catch (e) {
-        setMode('error');
-        setError(e instanceof Error ? e.message : 'Could not load workspace');
-    } }
-    useEffect(() => { void load(); return () => { if (timer.current)
-        clearTimeout(timer.current); }; }, []);
-    useEffect(() => { function handle(e: KeyboardEvent) { if (e.key === 'Escape') {
-        setModal(null);
-        setMobile(false);
-    } } window.addEventListener('keydown', handle); return () => window.removeEventListener('keydown', handle); }, []);
-    async function track(name: 'view_opened' | 'data_exported', entityId: string) { if (mode === 'demo') {
-        setEvents(prev => [{ id: uid(), name, entityId, createdAt: new Date().toISOString() }, ...prev]);
-        return;
-    } try {
-        const r = await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, entityId }) });
-        if (r.ok) {
-            const b = await r.json() as {
-                activity: Activity;
-            };
-            setEvents(prev => [b.activity, ...prev]);
+    useEffect(() => {
+        if (!started.current) { started.current = true; load(); }
+        function changed(event: StorageEvent) {
+            if (event.key === STORAGE_KEY) setError('Your workspace changed in another tab. Reload to use the latest version.');
         }
+        window.addEventListener('storage', changed);
+        return () => { window.removeEventListener('storage', changed); if (timer.current) clearTimeout(timer.current); };
+    }, []);
+    useEffect(() => {
+        function handle(e: KeyboardEvent) { if (e.key === 'Escape') { setModal(null); setMobile(false); } }
+        window.addEventListener('keydown', handle);
+        return () => window.removeEventListener('keydown', handle);
+    }, []);
+    function track(name: 'view_opened' | 'data_exported', entityId: string) {
+        try { if (snapshotRef.current) persist(snapshotRef.current.data, {id: uid(), name, entityId, createdAt: new Date().toISOString()}); }
+        catch (e) { setError(e instanceof Error ? e.message : 'Could not record local activity.'); }
     }
-    catch { } }
-    function navigate(next: View) { setView(next); setQuery(''); setMobile(false); void track('view_opened', next); }
-    async function commit(next: Data, event: string, entityId: string, message: string) { if (lock.current)
-        return false; lock.current = true; setSaving(true); setError(''); try {
-        if (mode === 'saved') {
-            const res = await fetch('/api/workspace', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: next, version, event, entityId }) });
-            const body = await res.json() as {
-                error?: string;
-                data: Data;
-                mode: 'demo' | 'saved';
-                events: Activity[];
-                version: number;
-                activity: Activity | null;
-            };
-            if (!res.ok)
-                throw Error(body.error);
-            setVersion(body.version);
-            if (body.activity) {
-                const activity = body.activity;
-                setEvents(prev => [activity, ...prev]);
-            }
-        }
-        else if (mode === 'demo') {
-            setEvents(prev => [{ id: uid(), name: event, entityId, createdAt: new Date().toISOString() }, ...prev]);
-        }
-        else
-            throw Error('Workspace is not ready');
-        setData(next);
-        tell(message);
-        return true;
+    function navigate(next: View) { setView(next); setQuery(''); setMobile(false); track('view_opened', next); }
+    async function commit(next: Data, event: string, entityId: string, message: string) {
+        if (lock.current) return false;
+        lock.current = true; setSaving(true); setError('');
+        try {
+            persist(next, {id: uid(), name: event, entityId, createdAt: new Date().toISOString()});
+            tell(message); return true;
+        } catch (e) { setError(e instanceof Error ? e.message : 'Could not save.'); return false; }
+        finally { setSaving(false); lock.current = false; }
     }
-    catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not save');
-        return false;
+    async function importBackup(file: File | undefined) {
+        if (!file) return;
+        try { if (file.size > 6000000) throw Error('Choose a backup smaller than 6 MB.'); setPendingImport(parseBackup(await file.text())); setError(''); }
+        catch(e) { setError(e instanceof Error ? e.message : 'Could not read backup.'); }
     }
-    finally {
-        setSaving(false);
-        lock.current = false;
-    } }
+    function restoreBackup() {
+        if (!pendingImport) return;
+        try {
+            persist(pendingImport.data, {id: uid(), name:'backup_imported', entityId:null, createdAt:new Date().toISOString()}, pendingImport.events);
+            setPendingImport(null); setProjectFilter('all'); setError(''); tell('Backup restored in this browser');
+        } catch(e) {setError(e instanceof Error ? e.message : 'Could not restore backup.');}
+    }
+    function exportBackup() {
+        if (!snapshotRef.current) return;
+        download('fieldnotes-workspace.json', JSON.stringify(snapshotRef.current, null, 2), 'application/json');
+        track('data_exported', 'workspace');
+    }
+    function recoveryCopy() {
+        try { download('fieldnotes-recovery.json', localStorage.getItem(STORAGE_KEY) ?? '{}', 'application/json'); }
+        catch {setError('Your browser is blocking storage access. Allow storage for this site, then try again.');}
+    }
+    function resetBrokenWorkspace() {
+        if (!resetConfirm) {setResetConfirm(true); return;}
+        try {localStorage.setItem(STORAGE_KEY, JSON.stringify(freshSnapshot())); setResetConfirm(false); load();}
+        catch {setError('Your browser could not save a fresh workspace. Check browser storage permissions.');}
+    }
     if (!data || mode === 'loading' || mode === 'error')
-        return <div className="loading"><div className="brand"><span className="brand-mark"><Leaf size={24}/></span>fieldnotes<span className="brand-dot">.</span></div>{mode === 'error' ? <><h1>Let’s reconnect your workspace.</h1><p>{error}</p><button className="primary" onClick={() => void load()}><RefreshCw size={16}/>Try again</button></> : <><span className="spinner"/><p>Opening your research workspace…</p></>}</div>;
+        return <div className="loading"><div className="brand"><span className="brand-mark"><Leaf size={24}/></span>fieldnotes<span className="brand-dot">.</span></div>{mode === 'error' ? <><h1>Let’s recover your workspace.</h1><p>{error}</p><div className="recovery-actions"><button className="primary" onClick={() => void load()}><RefreshCw size={16}/>Try again</button><button className="secondary" onClick={recoveryCopy}>Download recovery copy</button><button className="secondary" onClick={resetBrokenWorkspace}>{resetConfirm ? "Confirm reset saved work" : "Reset saved workspace"}</button></div></> : <><span className="spinner"/><p>Opening your research workspace…</p></>}</div>;
     const projects = data.projects, sources = data.sources, tasks = data.tasks;
     const projectName = (id: string) => projects.find(p => p.id === id)?.title ?? 'Unassigned';
     const read = sources.filter(s => s.status === 'Read').length, active = projects.filter(p => p.status === 'Active').length, remaining = tasks.filter(t => !t.done).length, notes = sources.filter(s => s.notesFinished).length;
@@ -129,10 +125,10 @@ export default function Workspace() {
     const heading = { Overview: ['YOUR RESEARCH, CONNECTED', 'A little clarity. A lot of possibility.'], Projects: ['FROM QUESTIONS TO FINDINGS', 'Make room for your next idea.'], Literature: ['A HOME FOR YOUR THINKING', 'Read widely. Connect the dots.'], Milestones: ['ONE STEP AT A TIME', 'Turn your plans into progress.'], Analytics: ['UNDERSTAND YOUR WORKFLOW', 'See the patterns in your practice.'], 'Build journal': ['YOUR PORTFOLIO STARTS HERE', 'Build, measure, and keep learning.'] }[view];
     const topAction = view === 'Projects' ? () => setModal({ kind: 'project' }) : view === 'Milestones' ? () => setModal({ kind: 'task' }) : () => setModal({ kind: 'source' });
     return <div className="app-shell">
- <aside className={'sidebar ' + (mobile ? 'mobile-open' : '')}><a className="brand" href="#" onClick={e => { e.preventDefault(); navigate('Overview'); }}><span className="brand-mark"><Leaf size={24}/></span>fieldnotes<span className="brand-dot">.</span></a><button className="workspace-switch" onClick={() => navigate('Overview')}><span className="workspace-avatar">D</span><span><b>My research workspace</b><small>Personal workspace</small></span><ChevronDown size={14}/></button><p className="nav-label">WORKSPACE</p><nav>{navigation.map(n => <button className={'nav-item ' + (view === n.name ? 'active' : '')} key={n.name} onClick={() => { setProjectFilter('all'); navigate(n.name); }}><n.icon size={18}/><span>{n.name}</span>{n.name === 'Literature' && <small>{sources.length}</small>}{n.name === 'Milestones' && <small>{remaining}</small>}</button>)}</nav><div className="sidebar-projects"><div className="nav-label">MY PROJECTS<button title="New project" aria-label="New project" onClick={() => setModal({ kind: 'project' })}><Plus size={15}/></button></div>{projects.slice(0, 5).map(p => <button key={p.id} onClick={() => { setProjectFilter(p.id); navigate('Projects'); }}><i className={'dot ' + p.color}/><span>{p.title}</span></button>)}</div><div className="sidebar-bottom"><div className="build-card"><span className="tiny-label"><Compass size={15}/>A SPACE TO GROW</span><p>Good research starts<br />with a little curiosity.</p><button onClick={() => navigate('Build journal')}>Explore the build journal <ArrowUpRight size={14}/></button></div><button className={'nav-item ' + (view === 'Build journal' ? 'active' : '')} onClick={() => navigate('Build journal')}><Code2 size={17}/><span>Build journal</span></button><div className="profile"><span className="profile-avatar">DR</span><div><b>Debanhi’s workspace</b><small>Research, with intention.</small></div><Leaf size={15}/></div></div></aside>
- <div className="main-shell"><header className="topbar"><div className="breadcrumbs"><button className="mobile-menu icon-button" aria-label="Toggle navigation" onClick={() => setMobile(!mobile)}><Menu size={21}/></button><span>Workspace</span><ChevronRight size={14}/><b>{view}</b></div><div className="top-right"><span className="save-state"><i />{saving ? 'Saving…' : mode === 'demo' ? 'Preview session' : 'Saved to your workspace'}</span><span className="top-avatar">DR</span></div></header>
+ <aside className={'sidebar ' + (mobile ? 'mobile-open' : '')}><a className="brand" href="#" onClick={e => { e.preventDefault(); navigate('Overview'); }}><span className="brand-mark"><Leaf size={24}/></span>fieldnotes<span className="brand-dot">.</span></a><button className="workspace-switch" onClick={() => navigate('Overview')}><span className="workspace-avatar">F</span><span><b>My research workspace</b><small>Personal workspace</small></span><ChevronDown size={14}/></button><p className="nav-label">WORKSPACE</p><nav>{navigation.map(n => <button className={'nav-item ' + (view === n.name ? 'active' : '')} key={n.name} onClick={() => { setProjectFilter('all'); navigate(n.name); }}><n.icon size={18}/><span>{n.name}</span>{n.name === 'Literature' && <small>{sources.length}</small>}{n.name === 'Milestones' && <small>{remaining}</small>}</button>)}</nav><div className="sidebar-projects"><div className="nav-label">MY PROJECTS<button title="New project" aria-label="New project" onClick={() => setModal({ kind: 'project' })}><Plus size={15}/></button></div>{projects.slice(0, 5).map(p => <button key={p.id} onClick={() => { setProjectFilter(p.id); navigate('Projects'); }}><i className={'dot ' + p.color}/><span>{p.title}</span></button>)}</div><div className="sidebar-bottom"><div className="build-card"><span className="tiny-label"><Compass size={15}/>A SPACE TO GROW</span><p>Good research starts<br />with a little curiosity.</p><button onClick={() => navigate('Build journal')}>Explore the build journal <ArrowUpRight size={14}/></button></div><button className={'nav-item ' + (view === 'Build journal' ? 'active' : '')} onClick={() => navigate('Build journal')}><Code2 size={17}/><span>Build journal</span></button><div className="profile"><span className="profile-avatar">FN</span><div><b>Your workspace</b><small>Research, with intention.</small></div><Leaf size={15}/></div></div></aside>
+ <div className="main-shell"><header className="topbar"><div className="breadcrumbs"><button className="mobile-menu icon-button" aria-label="Toggle navigation" onClick={() => setMobile(!mobile)}><Menu size={21}/></button><span>Workspace</span><ChevronRight size={14}/><b>{view}</b></div><div className="top-right"><span className="save-state"><i />{saving ? 'Saving…' : 'Saved in this browser'}</span><span className="top-avatar">FN</span></div></header>
  <main><div className="page-heading"><div><span className="eyebrow">{heading[0]}</span><h1>{view === 'Overview' ? <>Your research, <em>in motion.</em></> : view}</h1><p>{heading[1]}</p></div><div className="heading-action">{view === 'Overview' && <span className="date-label"><CalendarDays size={15}/>{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</span>}<button className="primary" onClick={topAction}><Plus size={17}/>{view === 'Projects' ? 'New project' : view === 'Milestones' ? 'Add milestone' : 'Add source'}</button></div></div>
- {mode === 'demo' && <div className="demo-banner"><span><Compass size={16}/><b>Explore your starter workspace.</b> Sample content; changes last for this preview session.</span><a href="/signin-with-chatgpt?return_to=%2F" target="_top">Sign in to save <ArrowUpRight size={14}/></a></div>}
+ <div className="demo-banner"><span><Compass size={16}/><b>No account needed.</b> Your work stays in this browser. Start with the examples or add your own.</span><button className="text-button" onClick={() => navigate('Build journal')}>Backup & restore <ArrowUpRight size={14}/></button></div>
  {error && <div role="alert" className="error-banner">{error}<button onClick={() => void load()}>Reload workspace</button></div>}
  {view === 'Overview' && <>
  <section className="stats-grid" aria-label="Research snapshot">{[{ label: 'Sources collected', value: sources.length, note: 'Ideas worth keeping', icon: BookOpen, color: 'clay', go: 'Literature' }, { label: 'Active projects', value: active, note: 'Questions taking shape', icon: Layers, color: 'sage', go: 'Projects' }, { label: 'Reading completed', value: read, note: sources.length ? Math.round(read / sources.length * 100) + '% of your library' : 'Start your reading list', icon: BookMarked, color: 'lavender', go: 'Literature' }, { label: 'Upcoming milestones', value: remaining, note: 'Your next small steps', icon: CheckSquare, color: 'sand', go: 'Milestones' }].map(stat => <button className="stat" key={stat.label} onClick={() => { setProjectFilter('all'); navigate(stat.go as View); }}><div className="stat-top"><span>{stat.label}</span><span className={'stat-icon ' + stat.color}><stat.icon size={17}/></span></div><strong>{stat.value.toString().padStart(2, '0')}</strong><span className="stat-note">{stat.note}<ArrowUpRight size={14}/></span></button>)}</section>
@@ -144,8 +140,9 @@ export default function Workspace() {
  {view === 'Projects' && <><div className="toolbar"><div className="search-field"><Search size={17}/><input aria-label="Search projects" placeholder="Find a project…" value={query} onChange={e => setQuery(e.target.value)}/></div><select aria-label="Filter projects" value={projectFilter} onChange={e => setProjectFilter(e.target.value)}><option value="all">All projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select></div><div className="project-detail-grid">{filteredProjects.map(p => <section className={'project-detail ' + p.color} key={p.id}><div className="project-detail-head"><span className="project-symbol"><FolderOpen size={23}/></span><span className="subtle-tag">{p.status}</span><button className="icon-button" aria-label={'Edit ' + p.title} onClick={() => setModal({ kind: 'project', item: p })}><MoreHorizontal size={20}/></button></div><span className="eyebrow">{p.category}</span><h2>{p.title}</h2><p>{p.question || 'Add a research question to give this project direction.'}</p><div className="project-progress"><span>Milestone progress</span><b>{progress(p.id)}%</b></div><div className="progress"><span style={{ width: progress(p.id) + '%' }}/></div><div className="project-detail-meta"><span><BookOpen size={14}/>{sources.filter(s => s.projectId === p.id).length} sources</span><span><CalendarDays size={14}/>{formatDate(p.due)}</span></div><div className="project-actions"><button onClick={() => { setProjectFilter(p.id); navigate('Literature'); }}>View literature <ArrowRight size={14}/></button><button onClick={() => setModal({ kind: 'project', item: p })}>Edit project</button></div></section>)}</div>{!filteredProjects.length && <Empty label="No projects here yet." action="Create a project" onClick={() => setModal({ kind: 'project' })}/>}</>}
  {view === 'Literature' && <><div className="library-tabs">{['All sources', 'To read', 'Reading', 'Read'].map(f => <button className={filter === f ? 'selected' : ''} key={f} onClick={() => setFilter(f)}>{f}<span>{f === 'All sources' ? sources.length : sources.filter(s => s.status === f).length}</span></button>)}</div><div className="toolbar"><div className="search-field"><Search size={17}/><input aria-label="Search literature" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search titles, authors, or topics…"/></div><select aria-label="Filter by project" value={projectFilter} onChange={e => setProjectFilter(e.target.value)}><option value="all">All projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select><button className="secondary" onClick={exportSources}><Download size={15}/>Export CSV</button></div><div className="table-wrap"><table className="source-table"><thead><tr><th>SOURCE</th><th>PROJECT</th><th>STATUS</th><th>NOTES</th><th><span className="sr-only">Open</span></th></tr></thead><tbody>{selectedSources.map(s => <tr key={s.id}><td><button className="source-title" onClick={() => setModal({ kind: 'source', item: s })}><span className="mini-book"><FileText size={18}/></span><span><b>{s.title}</b><small>{s.authors || 'Author not added'} · {s.year || 'No year'} · {s.type}</small><span className="tag-row">{s.tags.split(',').filter(Boolean).slice(0, 2).map(t => <i key={t}>{t.trim()}</i>)}</span></span></button></td><td><span className="table-project"><i className={'dot ' + (projects.find(p => p.id === s.projectId)?.color ?? 'sage')}/>{projectName(s.projectId)}</span></td><td><select className={'status-select ' + s.status.toLowerCase().replace(' ', '-')} aria-label={'Reading status for ' + s.title} disabled={saving} value={s.status} onChange={e => void commit({ ...data, sources: sources.map(x => x.id === s.id ? { ...x, status: e.target.value as Source['status'] } : x) }, e.target.value === 'Read' ? 'source_read' : 'source_updated', s.id, 'Reading status updated')}><option>To read</option><option>Reading</option><option>Read</option></select></td><td><button className="notes-status" onClick={() => setModal({ kind: 'source', item: s })}>{s.notesFinished ? <><CheckCircle2 size={15}/>Finished</> : s.notes ? <><FileText size={15}/>Draft</> : <span>Add notes</span>}</button></td><td><button className="icon-button" aria-label={'Open ' + s.title} onClick={() => setModal({ kind: 'source', item: s })}><ArrowUpRight size={17}/></button></td></tr>)}</tbody></table></div>{!selectedSources.length && <Empty label="No sources match your search." action="Add a source" onClick={() => setModal({ kind: 'source' })}/>}<p className="table-caption">{selectedSources.length} sources · Select a title to edit notes, links, and planned use.</p></>}
  {view === 'Milestones' && <><div className="toolbar"><div className="search-field"><Search size={17}/><input aria-label="Search milestones" value={query} onChange={e => setQuery(e.target.value)} placeholder="Find your next step…"/></div><select aria-label="Milestone project" value={projectFilter} onChange={e => setProjectFilter(e.target.value)}><option value="all">All projects</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select></div>{[false, true].map(done => <section className="milestone-section" key={String(done)}><h2>{done ? 'Completed' : 'On the horizon'}<span>{tasks.filter(t => t.done === done && (projectFilter === 'all' || t.projectId === projectFilter)).length}</span></h2>{tasks.filter(t => t.done === done && (projectFilter === 'all' || t.projectId === projectFilter) && t.title.toLowerCase().includes(query.toLowerCase())).sort((a, b) => a.due.localeCompare(b.due)).map(t => <div className={'milestone-row ' + (done ? 'done' : '')} key={t.id}><button disabled={saving} className={'check-button ' + (done ? 'checked' : '')} aria-label={(done ? 'Reopen ' : 'Complete ') + t.title} onClick={() => void commit({ ...data, tasks: tasks.map(x => x.id === t.id ? { ...x, done: !done } : x) }, done ? 'milestone_updated' : 'milestone_completed', t.id, done ? 'Milestone reopened' : 'Milestone completed')}><Check size={14}/></button><button className="milestone-title" onClick={() => setModal({ kind: 'task', item: t })}><b>{t.title}</b><small>{projectName(t.projectId)}</small></button><span className="milestone-date"><CalendarDays size={14}/>{formatDate(t.due)}</span><button className="icon-button" aria-label={'Edit ' + t.title} onClick={() => setModal({ kind: 'task', item: t })}><MoreHorizontal size={19}/></button></div>)}</section>)}{!tasks.length && <Empty label="Break a big question into small steps." action="Add milestone" onClick={() => setModal({ kind: 'task' })}/>}</>}
- {view === 'Analytics' && <><div className="analytics-notice"><span><BarChart3 size={18}/><b>{mode === 'demo' ? 'Preview activity' : 'Your workspace activity'}</b> · {mode === 'demo' ? 'Events from this preview session only.' : 'Recorded interactions, not simulated users.'}</span><button className="secondary" onClick={exportEvents}><Download size={15}/>Export events</button></div><div className="stats-grid"><Metric label="Recorded events" value={events.length} note="Up to 10,000 most recent events"/><Metric label="Sources read" value={read} note="Current library, including starter sources"/><Metric label="Notes finished" value={notes} note="Sources marked notes complete"/><Metric label="Milestones complete" value={tasks.filter(t => t.done).length} note="Current project milestones"/></div><div className="analytics-grid"><section className="panel chart-panel"><div className="section-heading"><div><h2>Your research rhythm</h2><p>Recorded events per day · last 7 days · local time</p></div><span className="subtle-tag">7 days</span></div><div className="bar-chart">{Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - 6 + i); const count = events.filter(e => new Date(e.createdAt).toDateString() === d.toDateString()).length; const max = Math.max(1, ...Array.from({ length: 7 }, (_, j) => { const a = new Date(); a.setDate(a.getDate() - 6 + j); return events.filter(e => new Date(e.createdAt).toDateString() === a.toDateString()).length; })); return <div className="bar-column" key={i}><b>{count}</b><div className="bar-track"><span style={{ height: (count / max * 100) + '%' }}/></div><small>{d.toLocaleDateString('en-US', { weekday: 'short' })}</small></div>; })}</div></section><section className="panel chart-panel"><div className="section-heading"><div><h2>From collecting to understanding</h2><p>Current source statuses · sample content included</p></div></div><div className="reading-breakdown">{(['To read', 'Reading', 'Read'] as const).map((status, i) => <div key={status}><div><span><i className={'dot ' + ['sage', 'clay', 'lavender'][i]}/>{status}</span><b>{sources.filter(s => s.status === status).length}</b></div><div className="progress"><span style={{ width: (sources.length ? sources.filter(s => s.status === status).length / sources.length * 100 : 0) + '%', background: ['#8caa94', '#c3795b', '#a19bb9'][i] }}/></div></div>)}</div><p className="metric-definition">Reading completion = sources marked Read ÷ all sources. This describes your library, not product retention.</p></section></div><section className="panel feature-panel"><div className="section-heading"><div><h2>Feature usage</h2><p>Event counts across your recorded activity. These are not funnel conversion rates.</p></div><button className="text-button" onClick={() => navigate('Build journal')}>Metric definitions <ArrowRight size={16}/></button></div><div className="feature-grid">{['project_created', 'source_created', 'source_read', 'milestone_completed'].map(name => <div key={name}><span>{name.replaceAll('_', ' ')}</span><strong>{events.filter(e => e.name === name).length}</strong></div>)}</div></section></>}
- {view === 'Build journal' && <><div className="journal-intro"><span className="project-symbol"><Code2 size={25}/></span><div><h2>A working product. A place to practice.</h2><p>Fieldnotes is your starting point for learning product analytics through a real research workflow.</p></div></div><div className="journal-grid"><section className="panel journal-card"><span className="eyebrow">01 · THE PRODUCT</span><h2>Bring your research together.</h2><p>Create projects, collect sources, write notes, and finish milestones. New workspaces start with sample projects and reading statuses; replace them with your own work.</p><ul><li>React + TypeScript interface</li><li>Server API with input validation</li><li>Cloud database with per-user records</li><li>Conflict detection for concurrent saves</li></ul></section><section className="panel journal-card"><span className="eyebrow">02 · THE MEASUREMENT</span><h2>Ask a question you can answer.</h2><p>Start with: which actions help a new researcher build a useful workspace?</p><ul><li>Activation: create a project and a source within 7 days of the first visit.</li><li>Retention: return on day 7 after the first visit.</li><li>Guardrail: monitor saving errors and incomplete records.</li></ul><p className="muted">These are proposed study metrics. This version shows your own recorded activity; it cannot establish causal effects or population retention.</p></section><section className="panel journal-card"><span className="eyebrow">03 · YOUR FIRST ANALYSIS</span><h2>Take the data into SQL and R.</h2><p>Use the exports to practice cleaning timestamps, counting feature usage, and checking how results change with metric definitions.</p><button className="secondary" onClick={exportEvents}><Download size={15}/>Export event data</button><button className="secondary" onClick={() => { download('fieldnotes-workspace.json', JSON.stringify(data, null, 2), 'application/json'); void track('data_exported', 'workspace'); }}><Download size={15}/>Export workspace</button><p className="muted">Exports contain your research notes. Choose what to include before sharing your portfolio.</p></section><section className="panel journal-card"><span className="eyebrow">04 · YOUR BUILD JOURNAL</span><h2>Make the next iteration yours.</h2><p>Practice a small improvement, explain your decision, and measure the result.</p><ol><li>Write three SQL queries using your exported events.</li><li>Identify a point of friction in adding a source.</li><li>Change one part of the form and document why.</li><li>Write a one-page findings memo with limitations.</li></ol><a className="text-button" href="https://github.com/D3banh1/Debanhi.github.io" target="_blank" rel="noreferrer">Your GitHub <ArrowUpRight size={15}/></a></section></div></>}
+ {view === 'Analytics' && <><div className="analytics-notice"><span><BarChart3 size={18}/><b>{'Your workspace activity'}</b> · {'Recorded in this browser only; no activity is sent to an analytics server.'}</span><button className="secondary" onClick={exportEvents}><Download size={15}/>Export events</button></div><div className="stats-grid"><Metric label="Recorded events" value={events.length} note="Up to 5,000 most recent local events"/><Metric label="Sources read" value={read} note="Current library, including starter sources"/><Metric label="Notes finished" value={notes} note="Sources marked notes complete"/><Metric label="Milestones complete" value={tasks.filter(t => t.done).length} note="Current project milestones"/></div><div className="analytics-grid"><section className="panel chart-panel"><div className="section-heading"><div><h2>Your research rhythm</h2><p>Recorded events per day · last 7 days · local time</p></div><span className="subtle-tag">7 days</span></div><div className="bar-chart">{Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - 6 + i); const count = events.filter(e => new Date(e.createdAt).toDateString() === d.toDateString()).length; const max = Math.max(1, ...Array.from({ length: 7 }, (_, j) => { const a = new Date(); a.setDate(a.getDate() - 6 + j); return events.filter(e => new Date(e.createdAt).toDateString() === a.toDateString()).length; })); return <div className="bar-column" key={i}><b>{count}</b><div className="bar-track"><span style={{ height: (count / max * 100) + '%' }}/></div><small>{d.toLocaleDateString('en-US', { weekday: 'short' })}</small></div>; })}</div></section><section className="panel chart-panel"><div className="section-heading"><div><h2>From collecting to understanding</h2><p>Current source statuses · sample content included</p></div></div><div className="reading-breakdown">{(['To read', 'Reading', 'Read'] as const).map((status, i) => <div key={status}><div><span><i className={'dot ' + ['sage', 'clay', 'lavender'][i]}/>{status}</span><b>{sources.filter(s => s.status === status).length}</b></div><div className="progress"><span style={{ width: (sources.length ? sources.filter(s => s.status === status).length / sources.length * 100 : 0) + '%', background: ['#8caa94', '#c3795b', '#a19bb9'][i] }}/></div></div>)}</div><p className="metric-definition">Reading completion = sources marked Read ÷ all sources. This describes your library, not product retention.</p></section></div><section className="panel feature-panel"><div className="section-heading"><div><h2>Feature usage</h2><p>Event counts across your recorded activity. These are not funnel conversion rates.</p></div><button className="text-button" onClick={() => navigate('Build journal')}>Metric definitions <ArrowRight size={16}/></button></div><div className="feature-grid">{['project_created', 'source_created', 'source_read', 'milestone_completed'].map(name => <div key={name}><span>{name.replaceAll('_', ' ')}</span><strong>{events.filter(e => e.name === name).length}</strong></div>)}</div></section></>}
+ {view === 'Build journal' && <><div className="journal-intro"><span className="project-symbol"><Code2 size={25}/></span><div><h2>A working product. A place to practice.</h2><p>Fieldnotes is your starting point for learning product analytics through a real research workflow.</p></div></div><div className="journal-grid"><section className="panel journal-card"><span className="eyebrow">01 · THE PRODUCT</span><h2>Bring your research together.</h2><p>Create projects, collect sources, write notes, and finish milestones. New workspaces start with sample projects and reading statuses; replace them with your own work.</p><ul><li>React + TypeScript interface</li><li>No account or login required</li><li>Browser storage with backup and restore</li><li>Validated records and local activity tracking</li></ul></section><section className="panel journal-card"><span className="eyebrow">02 · THE MEASUREMENT</span><h2>Ask a question you can answer.</h2><p>Start with: which actions help a new researcher build a useful workspace?</p><ul><li>Activation: create a project and a source within 7 days of the first visit.</li><li>Retention: return on day 7 after the first visit.</li><li>Guardrail: monitor saving errors and incomplete records.</li></ul><p className="muted">These are proposed study metrics. This version shows your own recorded activity; it cannot establish causal effects or population retention.</p></section><section className="panel journal-card"><span className="eyebrow">03 · YOUR FIRST ANALYSIS</span><h2>Take the data into SQL and R.</h2><p>Use the exports to practice cleaning timestamps, counting feature usage, and checking how results change with metric definitions.</p><button className="secondary" onClick={exportEvents}><Download size={15}/>Export event data</button><button className="secondary" onClick={exportBackup}><Download size={15}/>Export full backup</button><label className="secondary import-button">Import backup<input type="file" accept=".json,application/json" onChange={e => {void importBackup(e.target.files?.[0]); e.target.value='';}}/></label><p className="muted">Clearing browser data or using another device will not carry your work over. Export a backup regularly and import it to move your workspace. Exports include your research notes.</p></section><section className="panel journal-card"><span className="eyebrow">04 · YOUR BUILD JOURNAL</span><h2>Make the next iteration yours.</h2><p>Practice a small improvement, explain your decision, and measure the result.</p><ol><li>Write three SQL queries using your exported events.</li><li>Identify a point of friction in adding a source.</li><li>Change one part of the form and document why.</li><li>Write a one-page findings memo with limitations.</li></ol><a className="text-button" href="https://github.com/D3banh1/Debanhi.github.io" target="_blank" rel="noreferrer">Your GitHub <ArrowUpRight size={15}/></a></section></div></>}
+ {pendingImport && <section className="import-review" role="region" aria-label="Review backup"><h2>Restore this backup?</h2><p>{pendingImport.data.projects.length} projects, {pendingImport.data.sources.length} sources, and {pendingImport.data.tasks.length} milestones will replace this browser’s current workspace.</p><div><button className="secondary" onClick={exportBackup}>Back up current work</button><button className="secondary" onClick={() => setPendingImport(null)}>Cancel</button><button className="primary" onClick={restoreBackup}>Replace workspace</button></div></section>}
  </main><footer className="app-footer"><span>fieldnotes<span className="brand-dot">.</span> <span>A thoughtful place for your research.</span></span><span>Made for the questions that matter.</span></footer></div>
  {modal && <Editor modal={modal} data={data} busy={saving} error={error} onClose={() => { if (!saving) {
         setModal(null);
@@ -154,7 +151,7 @@ export default function Workspace() {
         const s = item as Source;
         const exists = sources.some(x => x.id === s.id);
         next = { ...data, sources: exists ? sources.map(x => x.id === s.id ? s : x) : [s, ...sources] };
-        event = exists ? 'source_updated' : 'source_created';
+        event = sourceEvent(sources.find(x => x.id === s.id), s);
     }
     else if (kind === 'project') {
         const p = item as Project;
@@ -166,8 +163,8 @@ export default function Workspace() {
         const t = item as Task;
         const exists = tasks.some(x => x.id === t.id);
         next = { ...data, tasks: exists ? tasks.map(x => x.id === t.id ? t : x) : [...tasks, t] };
-        event = exists ? 'milestone_updated' : 'milestone_created';
-    } if (await commit(next, event, item.id, 'Your ' + kind + ' is ' + (mode === 'demo' ? 'updated for this session' : 'saved')))
+        event = milestoneEvent(tasks.find(x => x.id === t.id), t);
+    } if (await commit(next, event, item.id, 'Your ' + kind + ' is ' + ('saved in this browser')))
         setModal(null); }} onDelete={async (id, kind) => { let next = { ...data }; if (kind === 'source')
         next.sources = sources.filter(x => x.id !== id);
     else if (kind === 'task')

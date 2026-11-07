@@ -39,7 +39,7 @@ export type Activity = {
     createdAt: string;
     entityId: string | null;
 };
-export const eventNames = ['workspace_opened', 'project_created', 'project_updated', 'source_created', 'source_updated', 'source_read', 'milestone_created', 'milestone_updated', 'milestone_completed', 'data_exported', 'view_opened', 'record_deleted'] as const;
+export const eventNames = ['backup_imported', 'workspace_opened', 'project_created', 'project_updated', 'source_created', 'source_updated', 'source_read', 'milestone_created', 'milestone_updated', 'milestone_completed', 'data_exported', 'view_opened', 'record_deleted'] as const;
 export function starterData(): Data {
     const day = (offset: number) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.toISOString().slice(0, 10); };
     return { projects: [
@@ -61,4 +61,14 @@ export function starterData(): Data {
             { id: 't5', title: 'Build the initial reading list', projectId: 'p2', due: day(-2), done: true },
             { id: 't6', title: 'Outline the comparative case strategy', projectId: 'p1', due: day(9), done: false }
         ] };
+}
+
+// Record the same transition regardless of which editor the user uses.
+export function sourceEvent(previous: Source | undefined, next: Source): string {
+  if (!previous) return 'source_created';
+  return previous.status !== 'Read' && next.status === 'Read' ? 'source_read' : 'source_updated';
+}
+export function milestoneEvent(previous: Task | undefined, next: Task): string {
+  if (!previous) return 'milestone_created';
+  return !previous.done && next.done ? 'milestone_completed' : 'milestone_updated';
 }

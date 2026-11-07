@@ -1,0 +1,6 @@
+import { z } from 'zod';
+const str = z.string().max(12000);
+const project = z.object({ id: z.string().max(100), title: z.string().min(1).max(200), question: str, category: str, status: z.enum(['Active', 'Planning', 'Complete']), due: z.string().max(10), color: z.enum(['sage', 'clay', 'lavender']) });
+const source = z.object({ id: z.string().max(100), title: z.string().min(1).max(500), authors: str, year: z.string().max(4), type: str, url: z.string().max(2000).refine(x => !x || /^https?:\/\//i.test(x), 'Use an http or https URL'), projectId: z.string().max(100), status: z.enum(['To read', 'Reading', 'Read']), tags: str, notes: str, use: str, notesFinished: z.boolean() });
+const task = z.object({ id: z.string().max(100), title: z.string().min(1).max(500), projectId: z.string().max(100), due: z.string().max(10), done: z.boolean() });
+export const dataSchema = z.object({ projects: z.array(project).max(300), sources: z.array(source).max(2000), tasks: z.array(task).max(2000) }).refine(d => d.sources.every(s => !s.projectId || d.projects.some(p => p.id === s.projectId)) && d.tasks.every(t => !t.projectId || d.projects.some(p => p.id === t.projectId)), { message: 'Invalid project reference' }).refine(d => [d.projects, d.sources, d.tasks].every(a => new Set(a.map(x => x.id)).size === a.length), { message: 'Duplicate IDs' });
