@@ -1,0 +1,26 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFileSync} from 'node:fs';
+test('activation and retention exclude immature users and preserve non-activated users',()=>{
+ const db=new DatabaseSync(':memory:');
+ db.exec('CREATE TABLE events(id TEXT,user_id TEXT,name TEXT,created_at TEXT)');
+ db.exec('CREATE TABLE workspaces(user_id TEXT,data TEXT)');
+ const put=db.prepare("INSERT INTO events VALUES(?,?,?,datetime('now',?))");
+ const add=(user,event,age)=>put.run(crypto.randomUUID(),user,event,age);
+ add('activated','workspace_opened','-10 days');
+ add('activated','project_created','-9 days');
+ add('activated','source_created','-8 days');
+ add('activated','workspace_opened','-3 days');
+ add('not-activated','workspace_opened','-9 days');
+ add('not-activated','project_created','-8 days');
+ add('recent','workspace_opened','-1 day');
+ add('recent','project_created','-1 day');
+ add('recent','source_created','-1 day');
+ const sql=readFileSync(new URL('../analytics/queries.sql',import.meta.url),'utf8').replace(/^--.*$/gm,'').split(';').map(x=>x.trim()).filter(Boolean);
+ const activation=db.prepare(sql[1]).get();
+ assert.equal(activation.eligible_users,2);assert.equal(activation.activated_users,1);assert.equal(activation.activation_pct,50);
+ const retention=db.prepare(sql[2]).get();
+ assert.equal(retention.eligible_users,2);assert.equal(retention.returned_users,1);assert.equal(retention.day7_return_pct,50);
+ db.close();
+});

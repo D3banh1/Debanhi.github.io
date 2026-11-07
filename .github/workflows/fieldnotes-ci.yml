@@ -1,0 +1,25 @@
+name: Fieldnotes checks
+on:
+  pull_request:
+    paths: ['projects/fieldnotes/**', '.github/workflows/fieldnotes-ci.yml']
+  push:
+    paths: ['projects/fieldnotes/**', '.github/workflows/fieldnotes-ci.yml']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: projects/fieldnotes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: projects/fieldnotes/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
